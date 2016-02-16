@@ -1,4 +1,13 @@
 #!/usr/bin/python3
+# This work is licensed under CC BY-SA 3.0, https://creativecommons.org/licenses/by-sa/3.0/
+# Author: Michael Walz <code@serpedon.de>, © 2016
+# Originally based on material from (a) the python software foundation and (b) Vencent Marcetti:
+# (a) Based on the email example of the python documention
+#   https://docs.python.org/3.4/library/email-examples.html
+#   license: PYTHON SOFTWARE FOUNDATION LICENSE VERSION 2, https://www.python.org/download/releases/3.4.0/license/
+# (b) Based on an answer by Vincent Marchetti on stackoverflow.com
+#   http://stackoverflow.com/questions/64505/sending-mail-from-python-using-smtp#64890
+#   license: CC BY-SA 3.0, https://creativecommons.org/licenses/by-sa/3.0/
 
 
 SMTPserver = 'smtprelaypool.ispgateway.de'
