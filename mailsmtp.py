@@ -9,30 +9,38 @@
 #   http://stackoverflow.com/questions/64505/sending-mail-from-python-using-smtp#64890
 #   license: CC BY-SA 3.0, https://creativecommons.org/licenses/by-sa/3.0/
 
-
-SMTPserver = 'smtprelaypool.ispgateway.de'
-PORT = 465
-sender =     'XXXXXXXX@XXXXXXXXXX.XX'
-destination = ['XXXXXXXXXXXX@XXXX.XX', 'XXXXXXX@XXXXXXXX.XX' ]
-
-USERNAME = "XXXXXXXX@XXXXXXXXXX.XX"
-PASSWORD = "XXXXXXXX"
-
-# typical values for text_subtype are plain, html, xml
-text_subtype = 'plain'
+# constants
+TLS = object()
+STARTTLS = object()
+PLAINTEXT = object()
+PORT_25_OR_465 = object()
 
 
-content="""\
+smtp_server = 'smtprelaypool.ispgateway.de'
+smtp_security = TLS
+smtp_check_certificate = True
+smtp_port = PORT_25_OR_465
+smtp_username = "XXXXXXXX@XXXXXXXXXX.XX"
+smtp_password = "XXXXXXXX"
+
+mail_from =     'XXXXXXXX@XXXXXXXXXX.XX'
+mail_to = ['XXXXXXXXXXXX@XXXX.XX', 'XXXXXXX@XXXXXXXX.XX' ]
+subject="This is a test-Mail"
+mail_body="""\
 Test message from Michael
 Gruß
 Michael
 """
+mail_body_type = 'plain' # typical values for mail_body_type are plain, html, xml
+attachments = ['mail.py', 'encrypt' ]
 
-subject="This is a test-Mail"
+gpg_binary = 'gpg'
+gpg_options = [ '--homedir' '/home/michael/Sicherheit/GnuPGKeys' ]
+gpg_recipient = [ '0xFE01CFB7' ]
+gpg_sign = True
 
-attach=['mail.asc' ] 
-
-attach = ['mail.py', 'encrypt' ]
+if smtp_port == PORT_25_OR_465 :
+    smtp_port = 465 if smtp_security == TLS else 25
 
 
 import sys
@@ -41,7 +49,7 @@ import re
 import ssl
 
 from smtplib import SMTP_SSL       # this invokes the secure SMTP protocol (port 465, uses SSL)
-# from smtplib import SMTP                  # use this for standard SMTP protocol   (port 25, no encryption)
+from smtplib import SMTP           # use this for standard SMTP protocol   (port 25, no encryption)
 
 from email.mime.audio import MIMEAudio
 from email.mime.base import MIMEBase
@@ -49,7 +57,6 @@ from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from os.path import basename
-from email.utils import COMMASPACE
 from email import encoders
 
 #For guessing MIME type based on file name extension
@@ -58,11 +65,11 @@ import mimetypes
 import subprocess
 
 try:
-    pgpMsg = MIMEMultipart()
-    pgpMsg.attach(MIMEText(content, text_subtype))
+    innerMsg = MIMEMultipart()
+    innerMsg.attach(MIMEText(mail_body, mail_body_type))
 
-    for path in attach or []:
-        # Guess the content type based on the file's extension.  Encoding
+    for path in attachments or []:
+        # Guess the mail_body type based on the file's extension.  Encoding
         # will be ignored, although we should check for simple things like
         # gzip'd or compressed files.
         ctype, encoding = mimetypes.guess_type(path)
@@ -75,49 +82,65 @@ try:
         if maintype == 'text':
             with open(path) as fp:
                 # Note: we should handle calculating the charset
-                attachpgpMsg = MIMEText(fp.read(), _subtype=subtype)
+                attachinnerMsg = MIMEText(fp.read(), _subtype=subtype)
         elif maintype == 'image':
             with open(path, 'rb') as fp:
-                attachpgpMsg = MIMEImage(fp.read(), _subtype=subtype)
+                attachinnerMsg = MIMEImage(fp.read(), _subtype=subtype)
         elif maintype == 'audio':
             with open(path, 'rb') as fp:
-                attachpgpMsg = MIMEAudio(fp.read(), _subtype=subtype)
+                attachinnerMsg = MIMEAudio(fp.read(), _subtype=subtype)
         else:
             with open(path, 'rb') as fp:
-                attachpgpMsg = MIMEBase(maintype, subtype)
-                attachpgpMsg.set_payload(fp.read())
+                attachinnerMsg = MIMEBase(maintype, subtype)
+                attachinnerMsg.set_payload(fp.read())
             # Encode the payload using Base64
-            encoders.encode_base64(attachpgpMsg)
+            encoders.encode_base64(attachinnerMsg)
     
         # Set the filename parameter
-        attachpgpMsg.add_header('Content-Disposition', 'attachment', filename=basename(path))
-        pgpMsg.attach(attachpgpMsg)
+        attachinnerMsg.add_header('Content-Disposition', 'attachment', filename=basename(path))
+        innerMsg.attach(attachinnerMsg)
 
-    gpgProg = subprocess.Popen('gpg --homedir /home/michael/Sicherheit/GnuPGKeys --sign --encrypt --armor -r 0xFE01CFB7'.split(), shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
-    gpgOut = gpgProg.communicate(pgpMsg.as_bytes())
+    if gpg_recipient : 
+        gpg_cmdline = [ gpg_binary ] + gpg_options + [ '--armor' '--encrypt' ] + ( [ '--sign' ] if gpg_sign else [] )
+        for recipient in gpg_recipient :
+            gpg_cmdline.append(['--recipient', recipient])
+        gpgProg = subprocess.Popen(gpg_cmdline, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+        gpgOut = gpgProg.communicate(innerMsg.as_bytes())
 
+        outerMsg = MIMEMultipart(_subtype='encrypted', protocol="application/pgp-encrypted")
 
-    msg = MIMEMultipart(_subtype='encrypted', protocol="application/pgp-encrypted")
-    msg['From'] = sender
+        encryptedMsgHeader = MIMEBase('application', 'pgp-encrypted')
+        encryptedMsgHeader.set_payload('Version 1\n')
+        outerMsg.attach(encryptedMsgHeader);
+
+        encryptedMsg = MIMEBase('application', 'octet-stream',name="encrypted.asc")
+        encryptedMsg.set_payload(gpgOut[0].decode('utf-8'))
+        encryptedMsg.add_header('Content-Disposition', 'inline', filename='encrypted.asc')
+
+        outerMsg.attach(encryptedMsg);
+    else : # If there are no gpg-recipients given, the message in not encrypted and the inner message coincides with the outer message
+        outerMsg = innerMsg
+
+    msg['From'] = mail_from
     msg['Subject'] = subject
-    msg['To'] = COMMASPACE.join(destination);
+    msg['To'] = ', '.join(mail_to);
 
-    encryptedMsg = MIMEBase('application', 'pgp-encrypted')
-    encryptedMsg.set_payload('Version 1\n')
-    msg.attach(encryptedMsg);
+    ssl_context = ssl.create_default_context() if smtp_check_certificate else None
+    if smtp_security == TLS :
+        conn = SMTP_SSL(host=smtp_server, port=smtp_port, context=ssl_context)
+    else :
+        conn = SMTP(host=smtp_server, port=smtp_port)
+        if smtp_security == STARTTLS :
+            conn.starttls(context=ssl_context)
+        elif smtp_security == PLAINTEXT :
+            pass 
+        else :
+            raise ValueError("unknown value of argument 'smtp_security'")
 
-    encryptedMsg = MIMEBase('application', 'octet-stream',name="encrypted.asc")
-    encryptedMsg.set_payload(gpgOut[0].decode('utf-8'))
-    encryptedMsg.add_header('Content-Disposition', 'inline', filename='encrypted.asc')
-
-    msg.attach(encryptedMsg);
-
-    context = ssl.create_default_context()
-    conn = SMTP_SSL(host=SMTPserver, port=PORT, context=context)
     conn.set_debuglevel(False)
-    conn.login(USERNAME, PASSWORD)
+    conn.login(smtp_username, smtp_password)
     try:
-        conn.sendmail(sender, destination, msg.as_string())
+        conn.sendmail(mail_from, mail_to, msg.as_string())
     finally:
         conn.close()
 
