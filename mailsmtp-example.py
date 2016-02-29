@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-import Mailsmtp
+import mailsmtp
 
 smtp_server = 'smtp@example.com'
 smtp_username = "testmail@example.com"
@@ -18,6 +18,6 @@ attachments = ['Mailsmtp.py', 'mailsmtp-example.py' ]
 
 gpg_recipient = [ '0x12345678', '0x01234567' ]
 
-Mailsmtp.mailsmtp(mail_from=mail_from, mail_to=mail_to, subject=subject, mail_body=mail_body, smtp_server=smtp_server, smtp_username=smtp_username, smtp_password=smtp_password, attachments=attachments, gpg_recipient=gpg_recipient )
+mailsmtp.mailsmtp(mail_from=mail_from, mail_to=mail_to, subject=subject, mail_body=mail_body, smtp_server=smtp_server, smtp_username=smtp_username, smtp_password=smtp_password, attachments=attachments, gpg_recipient=gpg_recipient )
  
 
