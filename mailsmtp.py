@@ -15,7 +15,7 @@ STARTTLS = object()
 PLAINTEXT = object()
 PORT_25_OR_465 = object()
 
-def mailsmtp(mail_from, mail_to, subject, mail_body, smtp_server, smtp_username, smtp_password, attachments = [], mail_body_type = 'plain', smtp_security = TLS, smtp_check_certificate = True, smtp_port = PORT_25_OR_465, gpg_binary = 'gpg', gpg_options = [], gpg_recipient = [], gpg_sign = True) :
+def mailsmtp(mail_from, mail_to, subject, mail_body, smtp_server, smtp_username, smtp_password, add_headers = dict(), attachments = [], mail_body_type = 'plain', smtp_security = TLS, smtp_check_certificate = True, smtp_port = PORT_25_OR_465, gpg_binary = 'gpg', gpg_options = [], gpg_recipient = [], gpg_sign = True) :
  
     if smtp_port == PORT_25_OR_465 :
         smtp_port = 465 if smtp_security == TLS else 25
@@ -103,6 +103,8 @@ def mailsmtp(mail_from, mail_to, subject, mail_body, smtp_server, smtp_username,
         outerMsg['From'] = mail_from
         outerMsg['Subject'] = subject
         outerMsg['To'] = ', '.join(mail_to);
+        for header,value in add_headers.items() :
+            outerMsg.add_header(header, value)
     
         ssl_context = ssl.create_default_context() if smtp_check_certificate else None
         if smtp_security == TLS :
