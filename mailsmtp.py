@@ -15,7 +15,7 @@ STARTTLS = object()
 PLAINTEXT = object()
 PORT_25_OR_465 = object()
 
-def mailsmtp(mail_from, mail_to, subject, mail_body, smtp_server, smtp_username, smtp_password, add_headers = dict(), attachments = [], mail_body_type = 'plain', smtp_security = TLS, smtp_check_certificate = True, smtp_port = PORT_25_OR_465, gpg_binary = 'gpg', gpg_options = [], gpg_recipient = [], gpg_sign = True) :
+def mailsmtp(mail_from, mail_to, subject, mail_body, smtp_server, smtp_username, smtp_password, add_headers = dict(), attachments = [], mail_body_type = 'plain', smtp_security = TLS, smtp_check_certificate = True, smtp_port = PORT_25_OR_465, gpg_binary = 'gpg', gpg_options = [], gpg_recipient = [], gpg_sign = True, gpg_send_error_msg_on_error = False) :
  
     if smtp_port == PORT_25_OR_465 :
         smtp_port = 465 if smtp_security == TLS else 25
@@ -84,19 +84,23 @@ def mailsmtp(mail_from, mail_to, subject, mail_body, smtp_server, smtp_username,
             gpgProg = subprocess.Popen(gpg_cmdline, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
             gpgOut = gpgProg.communicate(innerMsg.as_bytes())
             if len(gpgOut[1]) > 0:
-                raise Exception('GPG-call failed: ' + gpgOut[1].decode('utf-8'));
+                if not gpg_send_error_msg_on_error :
+                    raise Exception('GPG-call failed: ' + gpgOut[1].decode('utf-8'));
+                else :
+                    outerMsg = MIMEMultipart()
+                    outerMsg.attach(MIMEText('GPG-call failed: ' + gpgOut[1].decode('utf-8'), 'plain'))
+            else :
+                outerMsg = MIMEMultipart(_subtype='encrypted', protocol="application/pgp-encrypted")
     
-            outerMsg = MIMEMultipart(_subtype='encrypted', protocol="application/pgp-encrypted")
+                encryptedMsgHeader = MIMEBase('application', 'pgp-encrypted')
+                encryptedMsgHeader.set_payload('Version 1\n')
+                outerMsg.attach(encryptedMsgHeader);
     
-            encryptedMsgHeader = MIMEBase('application', 'pgp-encrypted')
-            encryptedMsgHeader.set_payload('Version 1\n')
-            outerMsg.attach(encryptedMsgHeader);
+                encryptedMsg = MIMEBase('application', 'octet-stream',name="encrypted.asc")
+                encryptedMsg.set_payload(gpgOut[0].decode('utf-8'))
+                encryptedMsg.add_header('Content-Disposition', 'inline', filename='encrypted.asc')
     
-            encryptedMsg = MIMEBase('application', 'octet-stream',name="encrypted.asc")
-            encryptedMsg.set_payload(gpgOut[0].decode('utf-8'))
-            encryptedMsg.add_header('Content-Disposition', 'inline', filename='encrypted.asc')
-    
-            outerMsg.attach(encryptedMsg);
+                outerMsg.attach(encryptedMsg);
         else : # If there are no gpg-recipients given, the message in not encrypted and the inner message coincides with the outer message
             outerMsg = innerMsg
     
